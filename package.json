@@ -12,10 +12,13 @@
     "classify": "tsx src/engine/cli.ts",
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:paypal": "tsx src/paypal/verify-adapter.ts",
+    "test": "tsx src/engine/cli.ts --all --offline && tsx src/paypal/verify-adapter.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
+    "@paypal/paypal-server-sdk": "^2.5.0",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.6",
     "dotenv": "^18.0.10",
