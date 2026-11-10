@@ -95,3 +95,43 @@ from a remote URL. Recorded here rather than worked around. Needs to be run by
 hand before submission, and this log updated with what the plugin actually
 changed about the PayPal code written afterwards.
 
+## 2026-11-11 04:4x — Server, console, and a finding I am not tuning away
+
+Two-pane demo: the person's screen and the trusted contact's console side by
+side, so one event is visible landing in both places at once.
+
+Chart decisions, against the data-viz method rather than taste:
+- Discrete payment events at irregular intervals, so bars anchored to a
+  baseline. A connected line would imply the amount existed between events.
+- Inbound money is a ring, not a fill. Shape carries the distinction because
+  the blue/aqua pair measures tritan ΔE 4.0 in dark mode — low enough that hue
+  alone is not safe. Both modes otherwise pass the validator (adjacent CVD ΔE
+  23.1 light / 19.6 dark against a ≥8 target).
+- Aqua sits at 2.74:1 on the light surface, below the 3:1 floor. The relief rule
+  applies and is satisfied twice over: the inbound point is always directly
+  labelled, and the AG Grid evidence table is a full table view of the same data.
+- Status colours (tier) never travel alone — every tier ships an icon and a label.
+
+Caught by screenshotting rather than by reading the code: the control fixture
+has 50 routine payments to a grocery delivery service, and the first version
+drew and labelled every one of them. Unreadable. Now capped to the most recent
+12 with the caption saying so, selective direct labels (pending, inbound, and
+the peak), and thinned date ticks.
+
+Also caught visually: the evidence grid was sorting secrecy (weight 10) to the
+bottom. Secrecy and isolation are the signals that separate fraud from an
+ordinary private payment, so they now sort first.
+
+### Finding: a webhook alone is not enough, and that is correct
+
+Posting a single realistic webhook — $2,400, brand-new payee, memo "urgent bail
+for Tommy, please do not tell mom" — scores 19 against a reporting threshold of
+20, and the system stays silent.
+
+I am recording this rather than lowering the threshold. It is the honest
+result and it says something real about the architecture: the payment event by
+itself does not carry enough narrative. Four signals fire from a memo; twelve
+fire once the conversation history is present. The companion-app context is
+load-bearing, not decorative, and a version of this that only watched payment
+events would be much weaker than the demo suggests.
+

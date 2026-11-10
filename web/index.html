@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Second Thought</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/styles/ag-grid.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/styles/ag-theme-quartz.css" />
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --page: #f9f9f7;
+    --ink-1: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-muted: #898781;
+    --grid-line: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --series-out: #2a78d6;
+    --series-in: #1baf7a;
+    --status-good: #0ca30c;
+    --status-warning: #fab219;
+    --status-serious: #ec835a;
+    --status-critical: #d03b3b;
+    --on-fill: #ffffff;
+    --on-warning: #0b0b0b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --page: #0d0d0d;
+      --ink-1: #f0efec;
+      --ink-2: #c3c2b7;
+      --ink-muted: #898781;
+      --grid-line: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --series-out: #3987e5;
+      --series-in: #199e70;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --ink-1: #f0efec;
+    --ink-2: #c3c2b7;
+    --ink-muted: #898781;
+    --grid-line: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --series-out: #3987e5;
+    --series-in: #199e70;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink-1);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 14px 16px; background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+  }
+  h1 { font-size: 17px; margin: 0; letter-spacing: -0.01em; }
+  h1 span { color: var(--ink-muted); font-weight: 400; margin-left: 8px; font-size: 14px; }
+  select, button {
+    font: inherit; color: var(--ink-1); background: var(--surface-1);
+    border: 1px solid var(--axis); border-radius: 8px; padding: 7px 11px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--ink-muted); }
+  .spacer { flex: 1; }
+  .badge {
+    font-size: 12px; padding: 4px 9px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--ink-2); background: var(--page);
+  }
+
+  main {
+    display: grid; grid-template-columns: minmax(340px, 420px) 1fr;
+    gap: 16px; padding: 16px; align-items: start;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .pane {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 14px; overflow: hidden;
+  }
+  .pane-head {
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--ink-muted);
+  }
+  .pane-body { padding: 16px; }
+
+  /* ---- The person's screen. Deliberately large, calm, uncluttered. ---- */
+  .phone-amount { font-size: 15px; color: var(--ink-2); }
+  .phone-amount strong { font-size: 30px; color: var(--ink-1); display: block; letter-spacing: -0.02em; }
+  .tierline { display: flex; align-items: center; gap: 8px; margin: 18px 0 10px; font-size: 13px; font-weight: 600; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+  .say { font-size: 19px; line-height: 1.5; margin: 6px 0 0; }
+  .predict {
+    margin-top: 18px; padding: 14px; border-radius: 10px;
+    background: var(--page); border: 1px solid var(--border);
+  }
+  .predict h4 {
+    margin: 0 0 8px; font-size: 11px; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--ink-muted);
+  }
+  .predict p { margin: 0 0 8px; font-size: 15px; }
+  .predict .when { color: var(--ink-muted); font-size: 12px; }
+  .actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+  .primary { background: var(--ink-1); color: var(--surface-1); border-color: var(--ink-1); font-weight: 600; }
+  .quiet { color: var(--ink-2); }
+  .freedom { margin-top: 12px; font-size: 13px; color: var(--ink-muted); }
+  .silent { padding: 26px 4px; text-align: center; color: var(--ink-muted); }
+  .silent strong { display: block; font-size: 17px; color: var(--ink-1); margin-bottom: 6px; }
+
+  /* ---- Facts strip ---- */
+  .facts { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+  .fact {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 9px 12px; min-width: 118px; background: var(--page);
+  }
+  .fact .k { font-size: 11px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .fact .v { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+
+  figure { margin: 0 0 18px; }
+  figcaption { font-size: 13px; color: var(--ink-2); margin-bottom: 4px; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--ink-2); margin: 8px 0 0; flex-wrap: wrap; }
+  .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 5px; }
+  .legend .ring { border-radius: 50%; border: 2px solid var(--series-in); background: transparent; }
+
+  .grid-wrap { height: 230px; transition: height .15s; }
+  .ag-theme-quartz { --ag-font-family: system-ui, -apple-system, "Segoe UI", sans-serif; --ag-font-size: 13px; }
+
+  .tip {
+    position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+    background: var(--surface-1); color: var(--ink-1); border: 1px solid var(--axis);
+    border-radius: 8px; padding: 7px 10px; font-size: 12px; z-index: 50;
+    box-shadow: 0 4px 14px rgba(0,0,0,.14); max-width: 260px;
+  }
+  .uncert { font-size: 12px; color: var(--ink-muted); margin-top: 12px; line-height: 1.45; }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); margin: 20px 0 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Second Thought <span>payments that read the story, not the number</span></h1>
+  <select id="scenario" aria-label="Scenario"></select>
+  <button id="theme" title="Toggle theme">Theme</button>
+  <div class="spacer"></div>
+  <span class="badge" id="engine">…</span>
+</header>
+
+<main>
+  <section class="pane" aria-labelledby="ph">
+    <div class="pane-head" id="ph">On Margaret's phone</div>
+    <div class="pane-body" id="phone"></div>
+  </section>
+
+  <section class="pane" aria-labelledby="ch">
+    <div class="pane-head" id="ch">Dana's console — trusted contact</div>
+    <div class="pane-body">
+      <div class="facts" id="facts"></div>
+      <figure>
+        <figcaption id="tlcap">Payments to this recipient</figcaption>
+        <div id="timeline"></div>
+        <div class="legend">
+          <span><i style="background:var(--series-out)"></i>Sent</span>
+          <span><i class="ring"></i>Received back</span>
+          <span><i style="background:var(--status-critical)"></i>Awaiting a second thought</span>
+        </div>
+      </figure>
+      <h3>Evidence</h3>
+      <div class="grid-wrap ag-theme-quartz" id="signalGrid"></div>
+      <div class="uncert" id="uncert"></div>
+    </div>
+  </section>
+</main>
+
+<div class="tip" id="tip" role="status"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/dist/ag-grid-community.min.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const tip = $('tip');
+const money = (n) => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+/* Status colour is never alone: every tier ships an icon and a label. */
+const TIERS = [
+  { label: 'Silent log',               color: 'var(--status-good)',     icon: '✓' },
+  { label: 'Inline note',              color: 'var(--status-good)',     icon: 'ℹ' },
+  { label: 'Cooling-off offered',      color: 'var(--status-warning)',  icon: '◴' },
+  { label: 'Trusted contact notified', color: 'var(--status-serious)',  icon: '▲' },
+  { label: 'Co-sign requested',        color: 'var(--status-critical)', icon: '⬣' },
+];
+
+function showTip(html, ev) {
+  tip.innerHTML = html;
+  tip.style.opacity = '1';
+  const pad = 14;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  const r = tip.getBoundingClientRect();
+  if (x + r.width > innerWidth) x = ev.clientX - r.width - pad;
+  if (y + r.height > innerHeight) y = ev.clientY - r.height - pad;
+  tip.style.left = x + 'px';
+  tip.style.top = y + 'px';
+}
+const hideTip = () => { tip.style.opacity = '0'; };
+
+/* ------------------------------------------------------------------ *
+ * The escalation timeline.
+ *
+ * Form: discrete payment events at irregular intervals, so bars anchored
+ * to a baseline rather than a connected line - a line would imply the
+ * amount existed between events. The predicted next move is drawn as a
+ * dashed ghost to the right of "now", which is the single most important
+ * mark on the chart: it is the claim the system is making about the
+ * future, and the thing the person can check.
+ * ------------------------------------------------------------------ */
+const MAX_POINTS = 12;
+
+function renderTimeline(view) {
+  const host = $('timeline');
+  const all = view.series || [];
+  if (!all.length) { host.innerHTML = '<p class="quiet">No history with this recipient.</p>'; return; }
+
+  // A long-standing recipient can have hundreds of routine payments. Showing
+  // every one turns the axis into mush and tells you nothing: what matters is
+  // the recent shape and the pending event. Keep the tail, say so in the caption.
+  const truncated = all.length > MAX_POINTS;
+  const series = truncated ? all.slice(-MAX_POINTS) : all;
+
+  const W = Math.max(420, host.clientWidth || 640), H = 210;
+  const m = { t: 22, r: 128, b: 34, l: 54 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const max = Math.max(...series.map(d => d.amount)) * 1.18;
+  const n = series.length;
+  const slot = iw / Math.max(n, 1);
+  const bw = Math.min(40, slot * 0.52);
+  const y = (v) => m.t + ih - (v / max) * ih;
+
+  const ticks = [0, max / 2, max];
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img"
+    aria-label="Payments to this recipient over time, with the pending payment and the predicted next move">`;
+
+  for (const t of ticks) {
+    svg += `<line x1="${m.l}" x2="${m.l + iw}" y1="${y(t)}" y2="${y(t)}"
+      stroke="var(--grid-line)" stroke-width="1" />
+      <text x="${m.l - 9}" y="${y(t) + 4}" text-anchor="end" font-size="11"
+      fill="var(--ink-muted)" style="font-variant-numeric:tabular-nums">${money(t)}</text>`;
+  }
+
+  // Selective direct labels, never a number on every point. Always label the
+  // pending payment, anything received back, and the largest; label everything
+  // only when the series is short enough to stay legible.
+  const peak = Math.max(...series.map((d) => d.amount));
+  const labelAll = series.length <= 6;
+  const everyNthDate = series.length > 8 ? 2 : 1;
+
+  series.forEach((d, i) => {
+    const cx = m.l + slot * i + slot / 2;
+    const date = new Date(d.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const isPending = d.status === 'pending';
+    const showValue = labelAll || isPending || d.direction === 'in' || d.amount === peak;
+    const showDate = isPending || i % everyNthDate === 0;
+    const payload = `<strong>${money(d.amount)}</strong><br>${date}` +
+      (d.memo ? `<br><span style="opacity:.75">“${d.memo}”</span>` : '') +
+      (d.direction === 'in' ? '<br><span style="opacity:.75">received back</span>' : '');
+    const esc = payload.replace(/"/g, '&quot;');
+
+    if (d.direction === 'in') {
+      // Secondary encoding: inbound is a ring, not a fill. Shape carries the
+      // distinction so it survives low tritan separation, and it is directly
+      // labelled, which is also the relief the light-mode contrast WARN requires.
+      svg += `<circle cx="${cx}" cy="${y(d.amount)}" r="7" fill="none"
+        stroke="var(--series-in)" stroke-width="2.5" data-tip="${esc}" style="cursor:pointer" />
+        <text x="${cx}" y="${y(d.amount) - 13}" text-anchor="middle" font-size="11"
+        fill="var(--ink-2)" style="font-variant-numeric:tabular-nums">${money(d.amount)}</text>`;
+    } else {
+      const pending = isPending;
+      const fill = pending ? 'var(--status-critical)' : 'var(--series-out)';
+      const h = Math.max(3, m.t + ih - y(d.amount));
+      // 4px rounded data-end, anchored to the baseline.
+      svg += `<rect x="${cx - bw / 2}" y="${y(d.amount)}" width="${bw}" height="${h}"
+        rx="4" fill="${fill}" data-tip="${esc}" style="cursor:pointer" />`;
+      if (pending) {
+        svg += `<rect x="${cx - bw / 2 - 3}" y="${y(d.amount) - 3}" width="${bw + 6}" height="${h + 3}"
+          rx="6" fill="none" stroke="var(--status-critical)" stroke-width="2" opacity=".35" />`;
+      }
+      if (showValue) {
+        svg += `<text x="${cx}" y="${y(d.amount) - 7}" text-anchor="middle" font-size="11"
+          fill="${pending ? 'var(--status-critical)' : 'var(--ink-2)'}"
+          style="font-variant-numeric:tabular-nums;font-weight:${pending ? 700 : 400}">${money(d.amount)}</text>`;
+      }
+    }
+    if (showDate) {
+      svg += `<text x="${cx}" y="${H - 11}" text-anchor="middle" font-size="10.5"
+        fill="var(--ink-muted)">${date}</text>`;
+    }
+  });
+
+  // Baseline.
+  svg += `<line x1="${m.l}" x2="${m.l + iw}" y1="${m.t + ih}" y2="${m.t + ih}"
+    stroke="var(--axis)" stroke-width="1" />`;
+
+  // The prediction: a dashed ghost beyond "now".
+  const next = (view.assessment.predictedNextMoves || [])[0];
+  if (next) {
+    const gx = m.l + iw + 14;
+    svg += `<line x1="${m.l + iw + 5}" x2="${m.l + iw + 5}" y1="${m.t - 6}" y2="${m.t + ih}"
+      stroke="var(--axis)" stroke-dasharray="3 3" stroke-width="1" />
+      <rect x="${gx}" y="${m.t + 6}" width="${m.r - 26}" height="${ih - 20}" rx="8"
+      fill="none" stroke="var(--status-serious)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".8" />
+      <text x="${gx + 10}" y="${m.t + 26}" font-size="10" fill="var(--ink-muted)"
+      letter-spacing="0.06em">PREDICTED</text>
+      <text x="${gx + 10}" y="${m.t + 42}" font-size="11.5" fill="var(--ink-2)">${next.within}</text>`;
+  }
+  svg += '</svg>';
+  host.innerHTML = svg;
+
+  const who = view.pending ? view.pending.payeeName : 'this recipient';
+  $('tlcap').textContent = truncated
+    ? `Payments to ${who} — most recent ${MAX_POINTS} of ${all.length}`
+    : `Payments to ${who}`;
+
+  host.querySelectorAll('[data-tip]').forEach((el) => {
+    el.addEventListener('mousemove', (e) => showTip(el.getAttribute('data-tip'), e));
+    el.addEventListener('mouseleave', hideTip);
+  });
+}
+
+function renderPhone(view) {
+  const a = view.assessment, p = view.pending, host = $('phone');
+  if (!p) { host.innerHTML = '<div class="silent"><strong>No pending payment.</strong></div>'; return; }
+
+  if (a.script === 'none') {
+    host.innerHTML = `
+      <div class="phone-amount">Sending to ${p.payeeName}<strong>${money(p.amount)}</strong></div>
+      <div class="silent">
+        <strong>Nothing shown.</strong>
+        This payment goes through without comment.<br>
+        <span style="font-size:13px">Staying quiet during an ordinary month is the behaviour the whole design is for.</span>
+      </div>`;
+    return;
+  }
+
+  const t = TIERS[a.tier];
+  const moves = (a.predictedNextMoves || []).slice(0, 2).map((mv) =>
+    `<p>${mv.description}<br><span class="when">Expected within ${mv.within}</span></p>`).join('');
+
+  host.innerHTML = `
+    <div class="phone-amount">Sending to ${p.payeeName}<strong>${money(p.amount)}</strong></div>
+    <div class="tierline" style="color:${t.color}">
+      <span class="dot" style="background:${t.color}"></span>
+      <span aria-hidden="true">${t.icon}</span> ${t.label}
+    </div>
+    <p class="say">${a.plainLanguage}</p>
+    ${moves ? `<div class="predict"><h4>What usually happens next</h4>${moves}</div>` : ''}
+    <div class="actions">
+      <button class="primary" id="send">Send ${money(p.amount)} anyway</button>
+      <button id="hold">Hold and ask ${view.trustedContact ? view.trustedContact.name.split(' ')[0] : 'someone'}</button>
+    </div>
+    <p class="freedom">Your money, your call. This is never blocked.</p>`;
+
+  $('send').onclick = (e) => {
+    e.target.textContent = 'Sent. Logged for ' + (view.trustedContact ? view.trustedContact.name.split(' ')[0] : 'your contact') + '.';
+    e.target.disabled = true;
+  };
+  $('hold').onclick = (e) => { e.target.textContent = 'Asked. They have been sent the details.'; e.target.disabled = true; };
+}
+
+function renderFacts(view) {
+  const f = view.facts, a = view.assessment;
+  const items = [
+    ['Script', a.script === 'none' ? 'none' : a.scriptLabel.split(' ')[0]],
+    ['Stage', a.script === 'none' ? '—' : a.stage + ' of ' + a.stageCount],
+    ['Confidence', Math.round(a.confidence * 100) + '%'],
+    ['Recipient age', f.payeeAgeDays === null ? '—' : f.payeeAgeDays + 'd'],
+    ['Vs. typical', f.pendingVsMedian ? f.pendingVsMedian.toFixed(1) + '×' : '—'],
+    ['Sent back', money(f.inboundFromPayee)],
+  ];
+  $('facts').innerHTML = items.map(([k, v]) =>
+    `<div class="fact"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  $('uncert').textContent = a.uncertainty || '';
+}
+
+let gridApi = null;
+function renderGrid(view) {
+  const rows = view.assessment.signals.map((s) => ({
+    signal: s.label, weight: s.weight, evidence: s.evidence,
+  }));
+  const cols = [
+    {
+      field: 'signal', headerName: 'What was observed', flex: 1.2, minWidth: 260,
+      tooltipField: 'signal',
+    },
+    {
+      // Heaviest evidence first. Secrecy and isolation are what separate fraud
+      // from an ordinary private payment, so they must not sort to the bottom.
+      field: 'weight', headerName: 'Weight', width: 104, type: 'numericColumn',
+      sort: 'desc',
+      cellStyle: (p) => ({ fontWeight: p.value >= 8 ? '700' : '400' }),
+    },
+    { field: 'evidence', headerName: 'Evidence', flex: 2, minWidth: 260, tooltipField: 'evidence' },
+  ];
+  // Size to content so a single-signal control does not sit in a field of empty rows.
+  $('signalGrid').style.height = Math.max(96, Math.min(330, 42 + rows.length * 38)) + 'px';
+  if (gridApi) { gridApi.setGridOption('rowData', rows); return; }
+  gridApi = agGrid.createGrid($('signalGrid'), {
+    columnDefs: cols, rowData: rows,
+    defaultColDef: { sortable: true, resizable: true },
+    rowHeight: 38, headerHeight: 38,
+    overlayNoRowsTemplate: '<span style="color:#898781">No signals — nothing to report.</span>',
+  });
+}
+
+async function load(name) {
+  const view = await (await fetch('/api/assess/' + name)).json();
+  if (view.error) { alert(view.error); return; }
+  renderPhone(view);
+  renderFacts(view);
+  renderTimeline(view);
+  renderGrid(view);
+  $('engine').textContent = 'engine: ' + view.assessment.engine;
+  addEventListener('resize', () => renderTimeline(view), { once: true });
+}
+
+(async function init() {
+  // ?theme=light|dark forces a theme. Useful for screenshots and for recording
+  // the demo in a known mode rather than at the mercy of the OS setting.
+  const params = new URLSearchParams(location.search);
+  const forced = params.get('theme');
+  if (forced === 'light' || forced === 'dark') {
+    document.documentElement.setAttribute('data-theme', forced);
+  }
+  const list = await (await fetch('/api/scenarios')).json();
+  $('scenario').innerHTML = list.map((s) =>
+    `<option value="${s.name}">${s.label}${s.isControl ? ' — control' : ''}</option>`).join('');
+  $('scenario').onchange = (e) => load(e.target.value);
+  $('theme').onclick = () => {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+    load($('scenario').value);
+  };
+  const preferred = list.find((s) => s.name === 'grandparent') || list[0];
+  $('scenario').value = preferred.name;
+  await load(preferred.name);
+})();
+</script>
+</body>
+</html>
