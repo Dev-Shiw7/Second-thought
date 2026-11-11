@@ -13,6 +13,8 @@ import 'dotenv/config';
 import { assess, loadAccount, extract } from './engine/index.ts';
 import { SIGNAL_LABEL, SIGNAL_WEIGHT } from './scripts/taxonomy.ts';
 import { applyWebhook, WATCHED_EVENTS, type PayPalWebhookEvent } from './paypal/adapter.ts';
+import { readPayPalEnv, makeClient } from './paypal/client.ts';
+import { verifyWebhook } from './paypal/verify-webhook.ts';
 import type { Account } from './types.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -20,7 +22,19 @@ const FIXTURES = join(HERE, '../fixtures');
 const WEB = join(HERE, '../web');
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
+/**
+ * Capture the exact bytes PayPal sent. Signature verification is computed over
+ * the raw body - re-serialising the parsed object changes key order and
+ * whitespace, and the signature will not match.
+ */
+app.use(
+  express.json({
+    limit: '1mb',
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: string }).rawBody = buf.toString('utf8');
+    },
+  }),
+);
 app.use(express.static(WEB));
 
 const TIER_NAME = [
@@ -136,12 +150,45 @@ app.get('/api/assess/:name', async (req, res) => {
 /**
  * PayPal webhook receiver - the real-time trigger.
  *
- * Signature verification is NOT implemented here and must be before this is
- * anything but a demo: PayPal's verify-webhook-signature endpoint, using
- * PAYPAL_WEBHOOK_ID. Stated plainly rather than stubbed out silently, because
- * an unverified webhook endpoint accepts forged events from anyone.
+ * Signature verification runs whenever PayPal credentials and a webhook id are
+ * configured. Without them the endpoint runs UNVERIFIED so the demo works on a
+ * clean checkout, and says so loudly on every request rather than failing
+ * silently - an unverified endpoint accepts forged events from anyone, and that
+ * is a property a reviewer should see, not discover.
  */
 app.post('/api/webhook', async (req, res) => {
+  const env = readPayPalEnv();
+  const webhookId = process.env.PAYPAL_WEBHOOK_ID;
+
+  if (env && webhookId) {
+    const raw = (req as express.Request & { rawBody?: string }).rawBody ?? '';
+    try {
+      const outcome = await verifyWebhook(
+        makeClient(env),
+        env,
+        req.headers as Record<string, string>,
+        raw,
+        webhookId,
+      );
+      if (!outcome.verified) {
+        console.warn('[webhook] rejected: ' + outcome.reason);
+        res.status(401).json({ error: 'signature verification failed', reason: outcome.reason });
+        return;
+      }
+    } catch (err) {
+      // Fail closed. An error verifying is not permission to proceed.
+      console.warn('[webhook] verification error: ' + (err instanceof Error ? err.message : String(err)));
+      res.status(503).json({ error: 'could not verify signature' });
+      return;
+    }
+  } else {
+    console.warn(
+      '[webhook] UNVERIFIED - no PAYPAL_CLIENT_ID/PAYPAL_WEBHOOK_ID configured. ' +
+        'Demo mode only; this endpoint would accept forged events.',
+    );
+  }
+  const signatureVerified = Boolean(env && webhookId);
+
   const event = req.body as PayPalWebhookEvent;
   if (!event?.event_type || !WATCHED_EVENTS.has(event.event_type)) {
     res.json({ ignored: true, reason: 'event type not watched' });
@@ -153,14 +200,19 @@ app.post('/api/webhook', async (req, res) => {
     return;
   }
   const acct = applyWebhook(loadAccount(join(FIXTURES, base + '.json')), event);
-  res.json(await buildView(acct, !process.env.ANTHROPIC_API_KEY));
+  const view = await buildView(acct, !process.env.ANTHROPIC_API_KEY);
+  res.json({ ...view, signatureVerified });
 });
 
 app.get('/api/health', (_req, res) => {
+  const verifying = Boolean(readPayPalEnv() && process.env.PAYPAL_WEBHOOK_ID);
   res.json({
     ok: true,
     engine: process.env.ANTHROPIC_API_KEY ? 'llm available' : 'offline only',
     paypal: process.env.PAYPAL_CLIENT_ID ? 'credentials present' : 'no credentials',
+    webhookSignatureVerification: verifying
+      ? 'enabled'
+      : 'DISABLED - set PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET and PAYPAL_WEBHOOK_ID to enable',
     scenarios: listFixtures().length,
   });
 });

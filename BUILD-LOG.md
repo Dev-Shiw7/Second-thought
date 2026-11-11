@@ -166,3 +166,30 @@ Boundary, stated plainly: the plugin informed PayPal SDK usage only. It had no
 bearing on the taxonomy, the feature extractor, the scorer, the model prompt or
 the console.
 
+## 2026-11-11 (later) — Webhook signature verification
+
+Closed the largest named gap. `src/paypal/verify-webhook.ts` calls PayPal's
+`/v1/notifications/verify-webhook-signature`, with the OAuth token coming from
+the SDK's `OAuthAuthorizationController` so there is exactly one credential path.
+The SDK ships no webhooks controller, so that endpoint is called directly.
+
+Two details that are easy to get wrong and would both fail silently:
+
+- Verification is computed over the **raw request bytes**. Re-serialising
+  `req.body` changes key order and whitespace and the signature will not match,
+  so the server captures the raw buffer in `express.json({ verify })` before
+  parsing.
+- It **fails closed**. An error while verifying returns 503, not success. An
+  exception during a security check is not permission to proceed.
+
+Without credentials the endpoint still runs so the demo works on a clean
+checkout, but it reports `signatureVerified: false` on every response and
+`/api/health` says `DISABLED` with the variables needed. Visible rather than
+silent: a reviewer should see this property, not discover it.
+
+Also fixed a self-inflicted testing error worth recording: an earlier `pkill`
+pattern did not match the running server, so a stale process kept serving old
+code on port 3000 and the new fields appeared to be missing. Killed by port
+instead. The lesson is that the first result looked like a code bug and was an
+environment bug — worth a second look before changing code that is already correct.
+

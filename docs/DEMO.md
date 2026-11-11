@@ -110,8 +110,9 @@ One slide, three lines:
 - The arithmetic is computed exactly and never asked of a model. The model is
   only asked the thing that's actually linguistic — is this secrecy coaching, or
   ordinary privacy?
-- **Say what isn't done.** Webhook signature verification. The model path isn't
-  executed end to end. A webhook alone scores 19 against a threshold of 20 and
+- **Say what isn't done.** The model path isn't executed end to end. Webhook
+  signature verification is implemented and fails closed, but has never seen a
+  real signed delivery. And a webhook alone scores 19 against a threshold of 20 —
   we left the threshold alone rather than tune it to make this demo work.
 
 That last bullet is not a weakness to bury. Judges can tell when you're talking

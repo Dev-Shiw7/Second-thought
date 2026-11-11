@@ -189,10 +189,13 @@ the fallback chain.
 Stated plainly, because a reviewer will find these anyway and because pretending
 otherwise would be worse than the gaps.
 
-- **Webhook signature verification is not implemented.** The endpoint accepts
-  unverified events. Before this is anything but a demo it needs PayPal's
-  `verify-webhook-signature` call with `PAYPAL_WEBHOOK_ID`. An unverified webhook
-  endpoint accepts forged events from anyone.
+- **Webhook signature verification is implemented but inactive by default.** It
+  calls PayPal's `verify-webhook-signature` over the raw request bytes and fails
+  closed — a verification error is not permission to proceed. It only runs when
+  `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and `PAYPAL_WEBHOOK_ID` are all set.
+  Without them the endpoint runs **unverified** so the demo works on a clean
+  checkout, and says so on every request (`signatureVerified: false`) and in
+  `/api/health`. It has not been exercised against a real signed delivery.
 - **The model path has not been executed end to end.** It is written against the
   documented SDK binding and typechecks cleanly, but the environment this was
   built in had no API key, so every number quoted above for accuracy comes from
