@@ -135,3 +135,34 @@ fire once the conversation history is present. The companion-app context is
 load-bearing, not decorative, and a version of this that only watched payment
 events would be much weaker than the demo suggests.
 
+## 2026-11-11 (later) — APIMatic context plugin, installed and actually used
+
+The official installer (`npx context-plugins install <github url>`) executes code
+fetched from a remote URL and was refused by the sandbox. Rather than work around
+that: cloned the repo, inspected it (61 files, all Markdown, no executable code),
+and copied the TypeScript skill set to the project-scope `.claude/skills/`
+location, with attribution in `.claude/skills/ATTRIBUTION.md`. The global plugin
+registry was left alone — it is managed state with a hashed index, and
+hand-editing it risks corrupting the user's config.
+
+Then used it, which is the part that counts. Three concrete changes, written up
+in full in `evidence/plugin/findings.md`:
+
+1. **Error payload casing.** Error payloads keep wire names — `debug_id`, not
+   `debugId` — unlike every model in the SDK. From memory this code would have
+   read `undefined` on every error path.
+2. **Which error classes Transaction Search throws.** `DefaultError` on
+   400/403/500, `SearchError` otherwise, confirmed by reading the controller
+   body as the skill instructs rather than guessing from the operation name.
+3. **A real bug: RESULTSET_TOO_LARGE.** `SearchError` carries `total_items` /
+   `maximum_items` for exactly this case. The first `fetchHistory` treated every
+   error the same and broke out of the window, which would have silently dropped
+   a whole month from the 24-month baseline. Since every behavioural ratio in
+   this project is measured against that baseline, the failure would have been
+   invisible and would have biased the system toward under-reacting. Now bisects
+   the window and recurses.
+
+Boundary, stated plainly: the plugin informed PayPal SDK usage only. It had no
+bearing on the taxonomy, the feature extractor, the scorer, the model prompt or
+the console.
+
