@@ -193,3 +193,76 @@ code on port 3000 and the new fields appeared to be missing. Killed by port
 instead. The lesson is that the first result looked like a code bug and was an
 environment bug — worth a second look before changing code that is already correct.
 
+
+## 2026-11-12/13 — Model provider swap, then the bugs that only run-time finds
+
+Moved the model path from Anthropic to Groq (`openai/gpt-oss-120b`, reasoning
+effort high). The Anthropic-specific bindings have no Groq equivalent, so they
+were replaced rather than adapted: `messages.parse` + `zodOutputFormat` became
+`chat.completions.create` with a strict `json_schema` response format generated
+from the same zod schema that validates the reply, so the schema stays the one
+source of truth. The explicit `cache_control` block is gone — Groq has no
+equivalent — so the taxonomy simply leads the system message for automatic
+prefix caching.
+
+Two defects the swap exposed immediately, both of which had been invisible
+while the model path had never actually run:
+
+- `SECOND_THOUGHT_MODEL ?? default` left the model name empty, because
+  `.env.example` ships the override present and blank. Groq answered
+  `model_not_found`. `??` only catches null and undefined; `''` is neither.
+- groq-sdk's 60s default timeout is short for high reasoning effort over the
+  taxonomy prompt. One fixture timed out and fell back to the offline scorer
+  with no visible failure — the only trace was the `uncertainty` string.
+
+### The model path, executed for the first time
+
+6/6 on script identification, both controls silent. Then two findings that are
+only visible once there is a second engine to compare against:
+
+**Confidence is not calibrated and must not drive the tier.** The model returns
+0.92–0.96 on essentially everything it flags, including both `none` controls.
+`chooseTier` read confidence, so every true positive collapsed onto the top two
+rungs and the five-rung ladder the design rests on went flat. The offline
+scorer never showed this because it *derives* confidence from evidence mass and
+separation, so the two quantities agreed. Tier now comes from observed signal
+mass, which both engines compute identically from the shared vocabulary.
+Confidence is kept as a ceiling only: it can hold a shaky assessment back, it
+can no longer push a thin one up.
+
+**19 of 24 stages were unreachable.** A stage counted as "reached" only when
+one of its signals weighed >= 8, and only four of the sixteen signal kinds do.
+So the stage pinned to wherever secrecy or isolation sat, and no later stage
+could ever be reported however much evidence there was for it. That is the one
+error this system cannot afford: the stage chooses the prediction shown to the
+person, and predicting a move they have already watched arrive is worse than
+saying nothing. A stage is now also reached proportionally, against its own
+vocabulary rather than a global cutoff.
+
+Both engines then agreed that `grandparent_early` is stage 4, not the stage 3
+in its ground truth. The taxonomy defines stage 4 as "a first payment has been
+requested or sent" and the payment is sitting pending, so the fixture was
+wrong — its intent, caught before any money moves, is unchanged. The prediction
+it shows changed from one the person has already seen to the next larger
+request and the instruction not to involve their bank.
+
+### Rate limits are a demo risk
+
+Five consecutive runs of the six fixtures: runs 3, 4 and 5 came back entirely
+offline. The Groq free tier's quota was exhausted partway through run 2 and the
+fallback is silent by design. The console badges the engine actually used, so
+it is visible there, but `/api/health` reports "llm available" from the mere
+presence of a key, which can be wrong. Worth knowing before a live demo: the
+system degrades to the weaker engine rather than failing, which is the right
+behaviour and the easiest thing to miss.
+
+### Two silent bugs in the PayPal path, found by writing its first test
+
+Neither could have been found by the live sandbox testing this project cannot
+do — an account with no transaction history exercises no windowing, no paging
+and no error branch. Both are in the commit message for `verify-ingest.ts`; in
+short: the SDK returns its own camelCase model rather than PayPal's JSON, and
+`err.result` is never populated for an operation that registers no `throwOn`
+statuses, which had silently disabled the `RESULTSET_TOO_LARGE` bisect
+altogether. `evidence/plugin/findings.md` has been corrected, including the
+part where our own grep spanned two operations and we recorded the union.

@@ -24,10 +24,12 @@ Every other model in this SDK is camelCase. Written from memory, this code would
 have read `err.result.debugId` and silently got `undefined` on every error path —
 the kind of bug that only shows up when something is already going wrong.
 
-## 2. It told us which classes Transaction Search actually throws
+## 2. It told us which classes Transaction Search actually throws — and we
+## then misread our own evidence
 
 The skill says do not guess from the operation name, and read the
-`throwOn(...)` / `defaultToError(...)` lines in the controller body. Doing that:
+`throwOn(...)` / `defaultToError(...)` lines **in the operation's method body**.
+The original grep did not scope to a method:
 
     $ grep -oE "throwOn\([0-9]+, [A-Za-z]+|defaultToError\([A-Za-z]+" \
         node_modules/@paypal/paypal-server-sdk/dist/cjs/controllers/transactionSearchController.js
@@ -38,9 +40,43 @@ The skill says do not guess from the operation name, and read the
     throwOn(403, defaultError
     throwOn(500, defaultError
 
-So: `DefaultError` on 400/403/500, `SearchError` otherwise. Both typed
-subclasses, so `result` is populated on both — which matters because the skill
-also notes a *bare* `ApiError` never gets that parse and only `body` is filled.
+Those five lines come from **two different operations** in the same controller,
+and we recorded the union of them as Transaction Search's mapping. Reading the
+method bodies, which is what the skill actually said to do:
+
+- `searchTransactions` declares **no `throwOn` lines at all** — only
+  `defaultToError(SearchError)`. Every non-2xx from Transaction Search is a
+  `SearchError`.
+- The `throwOn(400|403|500, DefaultError)` lines belong to `searchBalances`, a
+  different operation.
+
+Corrected in `src/paypal/ingest.ts`, and pinned by a test in
+`src/paypal/verify-ingest.ts` that stubs a 400 and asserts the concrete class.
+Recording the mistake rather than quietly fixing it, because the skill was right
+and the shortcut was not: a file-wide grep cannot answer a per-operation
+question.
+
+### 2b. And `result` is not populated here at all
+
+The same correction has a sharper consequence that only showed when the code was
+finally executed. `ApiError.result` is filled by `loadResult(error)`, and the
+core request builder calls that on **one** path only — the loop over error types
+registered with `throwOn(status, Class)`:
+
+    const error = new errorConstructor(context, ...args);
+    if (errorConstructor.prototype instanceof ApiError) {
+      await loadResult(error);      // <- only here
+    }
+    throw error;
+
+The default path (`_addResponseValidator`) constructs the error from
+`defaultToError(...)` and throws it without parsing anything. Since
+`searchTransactions` registers no statuses, **`err.result` is always `undefined`
+for this operation**, however typed the class is. The payload is on `err.body`,
+as a raw string.
+
+That silently disabled finding 3 below for a year of imagined runtime: see
+there.
 
 ## 3. It surfaced a real bug — RESULTSET_TOO_LARGE
 
@@ -61,6 +97,25 @@ quietly wrong, in the direction of under-reacting.
 `src/paypal/ingest.ts` now bisects the window and recurses on that specific
 error, and distinguishes 404 (no activity in the window, normal across a 24-month
 walk) from real failures.
+
+### What this entry originally got wrong
+
+The bisect was written as `err.result?.name === 'RESULTSET_TOO_LARGE'`. Per 2b,
+`result` is never populated for this operation, so that test could never be
+true, the bisect could never fire, and the too-large window was dropped exactly
+as before — the bug this entry claims to have fixed, still present, now with a
+branch above it that looked like a fix.
+
+Nothing detected this, because the fix and the bug fail identically: a dropped
+window produces no error, only a baseline with a hole in it. It was found by
+writing `src/paypal/verify-ingest.ts` and watching the bisect assertion fail.
+The payload is now read from `err.body`, and the test pins both halves: that the
+typed error arrives with `result` undefined, and that the body carries
+`total_items` at the wire spelling.
+
+The honest version of this entry is therefore narrower than it was, and more
+useful: the plugin pointed at the right failure, and the code written from that
+pointer still did not work until it was run.
 
 ## Where the boundary is
 

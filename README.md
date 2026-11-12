@@ -183,6 +183,40 @@ silently destroys the escalation and reciprocity signals — both are computed p
 payee. The test deliberately strips `account_id` from half the payees to exercise
 the fallback chain.
 
+`npm run verify:ingest` covers the layer above it: window width, the backward
+month-by-month walk, paging, the bisect when PayPal says a window returned more
+than it will serve, that the two halves meet with no gap, the recursion floor,
+404 as an empty window rather than a failure, and which error class the
+operation actually throws. It drives the real SDK through a stub transport
+(`unstable_httpClientOptions`), so it also runs with no credentials. **15/15.**
+
+Writing it found two bugs that no amount of reading had:
+
+- **The SDK does not return PayPal's JSON.** It deserializes into its own
+  camelCase model — `transactionDetails`, `totalPages` — and the ingestion code
+  was reading `transaction_details` and `total_pages`. Against the live API
+  every page would have counted as empty, nothing past page one would ever be
+  fetched, and the pages handed on were in a shape the adapter cannot read. The
+  baseline would have come back empty, with no error anywhere. The round-trip
+  test above could not catch it, because it feeds the adapter wire-shaped
+  fixtures directly and so never sees what the SDK does to them.
+- **`err.result` is never populated for this operation.** The SDK parses an
+  error body only for errors registered with `throwOn(status, Class)`;
+  `searchTransactions` registers none. So the `RESULTSET_TOO_LARGE` bisect,
+  which tested `err.result?.name`, could never fire — the window it exists to
+  rescue was being dropped exactly as it was before the branch was written. The
+  payload lives on `err.body`.
+
+Both failed silently. Neither would have been caught by a live sandbox either:
+an account with no transaction history exercises no windowing, no paging and no
+error branch.
+
+`npm run verify:failclosed` covers the webhook signature path's failure modes —
+each missing header refused without PayPal being called at all, an unparseable
+body, a `FAILURE` verdict, a missing `verification_status`, a 5xx from the
+verify call, and a dead network. The assertion in every case is that nothing
+reports verified. **11/11.**
+
 ---
 
 ## What is not done
@@ -196,7 +230,13 @@ otherwise would be worse than the gaps.
   `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and `PAYPAL_WEBHOOK_ID` are all set.
   Without them the endpoint runs **unverified** so the demo works on a clean
   checkout, and says so on every request (`signatureVerified: false`) and in
-  `/api/health`. It has not been exercised against a real signed delivery.
+  `/api/health`. It has never been exercised against a real signed delivery,
+  and in this environment it cannot be: PayPal does not operate in Pakistan, so
+  there are no sandbox credentials to get. Verification is a call asking PayPal
+  whether PayPal signed something; there is no offline equivalent. What is
+  tested is every way that call can fail to come back clean —
+  `npm run verify:failclosed`, 11/11 — because an endpoint that reads "I could
+  not check" as "it is fine" accepts forged events from anyone.
 - **The model path has now been run end to end, on six fixtures, once.** On
   Groq (`openai/gpt-oss-120b`, reasoning effort high) it identifies all six
   scripts correctly, including both controls — `clean` and `legit_large` come

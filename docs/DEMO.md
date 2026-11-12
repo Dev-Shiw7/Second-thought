@@ -114,7 +114,8 @@ One slide, three lines:
   identified, both controls silent — but on six self-written fixtures, once,
   which is a demo, not an evaluation. Webhook
   signature verification is implemented and fails closed, but has never seen a
-  real signed delivery. And a webhook alone scores 19 against a threshold of 20 —
+  real signed delivery and can't — no PayPal in Pakistan, so no sandbox
+  credentials. Every failure path around it is tested instead. And a webhook alone scores 19 against a threshold of 20 —
   we left the threshold alone rather than tune it to make this demo work.
 
 That last bullet is not a weakness to bury. Judges can tell when you're talking
