@@ -199,6 +199,12 @@ export async function assessWithModel(
   const script = SCRIPTS.find((s) => s.id === parsed.script);
   const stageDef = script?.stages.find((st) => st.n === parsed.stage);
   const isNone = parsed.script === 'none';
+  // The model's own signals, not the structural ones it was shown: the tier is
+  // earned by what this engine actually recovered from the narrative.
+  const modelSignals: Signal[] = parsed.signals.map((s) => ({
+    kind: s.kind as SignalKind,
+    evidence: s.evidence,
+  }));
 
   return {
     script: parsed.script as ScriptId,
@@ -207,9 +213,9 @@ export async function assessWithModel(
     stageCount: script?.stages.length ?? 0,
     stageName: stageDef?.name ?? '-',
     confidence: Math.max(0, Math.min(1, parsed.confidence)),
-    signals: parsed.signals.map((s) => ({ kind: s.kind as SignalKind, evidence: s.evidence })),
+    signals: modelSignals,
     predictedNextMoves: parsed.predictedNextMoves,
-    tier: isNone ? 0 : chooseTier(parsed.confidence, f),
+    tier: isNone ? 0 : chooseTier(parsed.confidence, f, modelSignals),
     plainLanguage: isNone ? '' : parsed.plainLanguage,
     uncertainty: parsed.uncertainty,
     engine: 'llm',

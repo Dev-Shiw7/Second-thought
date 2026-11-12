@@ -112,7 +112,7 @@ const SCENARIOS: Record<string, () => Account> = {
       { ts: dayIso(-0.4), source: 'chat', text: "A Mr Alvarez came on the line, said he is the attorney and bail must be posted within the hour or Tommy stays until Monday." },
     ];
     txns.push({ id: tid(), ts: dayIso(-0.02), amountCents: 120000, currency: 'USD', payeeId: 'P-ALVAREZ', direction: 'out', memo: 'bail for Tommy urgent', instrument: 'paypal_balance', status: 'pending' });
-    return account({ payees: [...ESTABLISHED, payee], transactions: txns.sort((a, b) => a.ts.localeCompare(b.ts)), notes, _groundTruth: { script: 'grandparent', stage: 3, note: 'Caught before any money has moved.' } });
+    return account({ payees: [...ESTABLISHED, payee], transactions: txns.sort((a, b) => a.ts.localeCompare(b.ts)), notes, _groundTruth: { script: 'grandparent', stage: 4, note: 'A first payment has been requested and is pending; no money has moved yet. Stage 4 by the taxonomy ("requested or sent"), not stage 3 - at stage 3 the request itself is still in the future, and predicting it would be predicting the past.' } });
   },
 
   pig_butchering: () => {

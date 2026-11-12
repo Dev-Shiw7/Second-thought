@@ -1756,7 +1756,7 @@
   },
   "_groundTruth": {
     "script": "grandparent",
-    "stage": 3,
-    "note": "Caught before any money has moved."
+    "stage": 4,
+    "note": "A first payment has been requested and is pending; no money has moved yet. Stage 4 by the taxonomy (\"requested or sent\"), not stage 3 - at stage 3 the request itself is still in the future, and predicting it would be predicting the past."
   }
 }
