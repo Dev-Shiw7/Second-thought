@@ -144,9 +144,10 @@ judgment is judgment.
 |---|---|---|
 | Needs a key | yes | **no** |
 | Script identification on fixtures | **6/6** | **6/6** |
-| Stage accuracy on fixtures | 5/6 *(see below)* | **6/6** |
+| Stage accuracy on fixtures | **6/6** | **6/6** |
+| Runs without a network | no | yes |
 | Reads intent | yes | no — lexical matching only |
-| Deterministic | no | yes |
+| Deterministic | no — *(see below)* | yes |
 
 The offline scorer exists so judges can run this, and so the regression tests are
 reproducible. It is genuinely weaker where it matters, and it does not pretend
@@ -237,16 +238,25 @@ otherwise would be worse than the gaps.
   tested is every way that call can fail to come back clean —
   `npm run verify:failclosed`, 11/11 — because an endpoint that reads "I could
   not check" as "it is fine" accepts forged events from anyone.
-- **The model path has now been run end to end, on six fixtures, once.** On
-  Groq (`openai/gpt-oss-120b`, reasoning effort high) it identifies all six
-  scripts correctly, including both controls — `clean` and `legit_large` come
-  back `none` at 0.94–0.96 confidence, which is the result that matters most.
-  It disagrees with one fixture's expected stage: `grandparent_early` is
-  labelled stage 4 (first payment) where the fixture says stage 3 (secrecy).
-  Six fixtures written by the same people who wrote the taxonomy is not an
-  accuracy measurement, and confidence values clustered at 0.96 are a model
-  being agreeable, not a model being calibrated. The offline scorer is still
+- **The model path's numbers come from 14 assessments, not a measurement.** It
+  runs on Groq (`openai/gpt-oss-120b`, reasoning effort high). Across five runs
+  of the six fixtures, only **14 of 30** assessments actually reached the model
+  — the free-tier quota ran out partway through, and the rest fell back to the
+  offline scorer. Of the 14 that did run, script was right 14/14 and stage
+  matched 14/14, including both controls returning `none`. But an earlier run
+  under the same prompt returned stage 5 for `pig_butchering` where these
+  returned 6, so stage is *not* demonstrated stable run to run. Six fixtures
+  written by the same person who wrote the taxonomy is not an accuracy
+  measurement at any sample size, and confidence clustered at 0.90–0.97 across
+  every fixture — controls included — is a model being agreeable, not a model
+  being calibrated. That last point is why the escalation tier is computed from
+  evidence rather than from the model's confidence. The offline scorer is still
   what the regression tests assert against.
+- **The model path degrades silently when the quota runs out.** It falls back
+  to the offline scorer rather than failing, which is the right behaviour and
+  the easiest thing to miss: three of five consecutive runs came back entirely
+  offline. The console badges which engine produced each assessment. Worth
+  knowing before demoing this live.
 - **A single webhook is not enough on its own.** A realistic event — $2,400, new
   payee, memo "urgent bail for Tommy, please do not tell mom" — scores 19 against
   a threshold of 20 and stays silent. Four signals fire from a memo; twelve fire

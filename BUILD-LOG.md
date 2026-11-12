@@ -266,3 +266,24 @@ short: the SDK returns its own camelCase model rather than PayPal's JSON, and
 statuses, which had silently disabled the `RESULTSET_TOO_LARGE` bisect
 altogether. `evidence/plugin/findings.md` has been corrected, including the
 part where our own grep spanned two operations and we recorded the union.
+
+### Variance: measured, and mostly blocked by the quota
+
+Five runs of the six fixtures, on the corrected code. Only **14 of 30**
+assessments reached the model — the Groq free-tier quota ran out partway
+through, exactly as it had the first time. Of the 14 that ran: script correct
+14/14, stage matching 14/14, both controls returning `none` every time they
+were assessed by the model.
+
+What that does not establish is stability. An earlier run under the same prompt
+returned stage 5 for `pig_butchering` where these three returned 6, so the
+model's stage output does vary between runs. Confidence stayed in 0.90–0.97 on
+every fixture including the controls, which is the clearest confirmation that
+it is not a calibrated quantity and was never safe to compute the tier from.
+
+Tier, now that it comes from evidence mass, was identical across every model
+run of the same fixture. That is the property that was wanted: the ladder is
+reproducible even where the model's own numbers are not.
+
+The README reports 14 assessments rather than "6/6", because 6/6 from a single
+run of self-written fixtures is not a result worth defending.
