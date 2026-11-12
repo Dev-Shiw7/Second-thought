@@ -208,7 +208,12 @@ app.get('/api/health', (_req, res) => {
   const verifying = Boolean(readPayPalEnv() && process.env.PAYPAL_WEBHOOK_ID);
   res.json({
     ok: true,
-    engine: process.env.GROQ_API_KEY ? 'llm available' : 'offline only',
+    // Key presence, not reachability: a quota-exhausted or rate-limited key
+    // still reports configured, and the request then falls back to the offline
+    // scorer. The console badges the engine each assessment actually used.
+    engine: process.env.GROQ_API_KEY
+      ? 'model path configured - falls back to the offline scorer on any error'
+      : 'offline only',
     paypal: process.env.PAYPAL_CLIENT_ID ? 'credentials present' : 'no credentials',
     webhookSignatureVerification: verifying
       ? 'enabled'
