@@ -23,12 +23,78 @@ function isoDay(d: Date): string {
   return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
+/**
+ * Put the SDK's deserialized model back into PayPal's wire shape.
+ *
+ * The SDK does not hand back the JSON PayPal sent. It deserializes into its
+ * own model, which is camelCase: `transactionDetails`, `totalPages`,
+ * `transactionInfo`, `accountId`. Everything downstream of here - the adapter,
+ * its round-trip test, and the webhook path, which gets raw unparsed JSON and
+ * so really is snake_case - speaks the wire shape.
+ *
+ * Reading `result` as though it were the wire shape is silent rather than
+ * loud: `transaction_details` is undefined, so the page counts as empty;
+ * `total_pages` is undefined, so it defaults to 1 and nothing after the first
+ * page is ever fetched; and the pages handed on are in a shape the adapter
+ * cannot read, so the baseline comes back empty with no error anywhere. That
+ * is the exact failure this project keeps warning about - a hole in the
+ * baseline does not announce itself, it just makes every ratio wrong.
+ *
+ * The SDK's naming is a mechanical transform of the wire names, so inverting
+ * it mechanically is correct.
+ */
+function toWireShape(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(toWireShape);
+  if (value === null || typeof value !== 'object') return value;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase())] = toWireShape(v);
+  }
+  return out;
+}
+
 export interface IngestOptions {
   /** How far back to build the baseline. More history means better signals. */
   months?: number;
   /** Stop early once this many transactions are collected. */
   maxTransactions?: number;
   onProgress?: (msg: string) => void;
+}
+
+/** The fields PayPal puts in a Transaction Search error body. Wire names. */
+interface SearchErrorPayload {
+  name?: string;
+  message?: string;
+  debug_id?: string;
+  total_items?: number;
+  maximum_items?: number;
+}
+
+/**
+ * Read a SearchError's payload.
+ *
+ * `result` is NOT populated here, and assuming it is cost this code its most
+ * important branch. The core request builder calls `loadResult` only on the
+ * path for errors registered with `throwOn(status, Class)`. `searchTransactions`
+ * registers no statuses - it declares `defaultToError(SearchError)` alone - and
+ * the default path constructs the error and throws it without parsing anything.
+ * So for this operation `err.result` is ALWAYS undefined, however typed the
+ * class is, and the payload has to be read off the raw `body`.
+ *
+ * With `result` trusted, `err.result?.name` was undefined on every error, the
+ * RESULTSET_TOO_LARGE test below could never be true, and a window PayPal
+ * refused to serve was dropped in silence - which is the exact month-shaped
+ * hole in the baseline this whole branch exists to prevent.
+ */
+function searchErrorPayload(err: SearchError): SearchErrorPayload {
+  if (err.result) return err.result as SearchErrorPayload;
+  const raw = typeof err.body === 'string' ? err.body : '';
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as SearchErrorPayload;
+  } catch {
+    return {};
+  }
 }
 
 interface WindowResult {
@@ -40,11 +106,14 @@ interface WindowResult {
  * Fetch one date window, paging through it.
  *
  * Endpoint methods throw on any non-2xx — there is no non-throwing variant.
- * Transaction Search maps 400, 403 and 500 to `DefaultError` and everything
- * else to `SearchError`; both are typed subclasses of `ApiError`, so `result`
- * is populated. Note the payload keeps the wire's own field names: it is
- * `debug_id` and `total_items`, never `debugId` or `totalItems`, unlike the
- * camelCase used throughout the rest of the SDK.
+ * `searchTransactions` declares no `throwOn` lines at all, only
+ * `defaultToError(SearchError)`, so EVERY non-2xx from this operation is a
+ * `SearchError`. (The 400/403/500 → `DefaultError` mapping in the same
+ * controller belongs to `searchBalances`, a different operation. Reading it as
+ * Transaction Search's would mean the RESULTSET_TOO_LARGE branch below never
+ * fires.) `SearchError` is a typed subclass, so `result` is populated, and the
+ * payload keeps the wire's own field names: `debug_id` and `total_items`,
+ * never `debugId` or `totalItems`, unlike the deserialized success models.
  */
 async function fetchWindow(
   controller: TransactionSearchController,
@@ -71,7 +140,7 @@ async function fetchWindow(
         page,
         balanceAffectingRecordsOnly: 'Y',
       });
-      const body = res.result as unknown as PayPalSearchResponse;
+      const body = toWireShape(res.result) as PayPalSearchResponse;
       pages.push(body);
       collected += body.transaction_details?.length ?? 0;
       totalPages = body.total_pages ?? 1;
@@ -91,13 +160,14 @@ async function fetchWindow(
        * So: bisect the window and recurse.
        */
       if (err instanceof SearchError) {
-        const issue = err.result?.name ?? '';
+        const payload = searchErrorPayload(err);
+        const issue = payload.name ?? '';
         const spanDays = (end.getTime() - start.getTime()) / 86400000;
         if (issue === 'RESULTSET_TOO_LARGE' && spanDays > MIN_WINDOW_DAYS) {
           const mid = new Date((start.getTime() + end.getTime()) / 2);
           onProgress?.(
-            `${label} too large (${err.result?.total_items ?? '?'} items, max ` +
-              `${err.result?.maximum_items ?? '?'}) - splitting`,
+            `${label} too large (${payload.total_items ?? '?'} items, max ` +
+              `${payload.maximum_items ?? '?'}) - splitting`,
           );
           const a = await fetchWindow(controller, start, mid, remaining, onProgress);
           const b = await fetchWindow(
@@ -121,7 +191,7 @@ async function fetchWindow(
         // `result` is only populated on the typed subclasses; a bare ApiError
         // never gets that parse, so fall back to the raw body.
         const detail =
-          (err as ApiError<{ message?: string; debug_id?: string }>).result?.message ??
+          (err instanceof SearchError ? searchErrorPayload(err).message : undefined) ??
           (typeof err.body === 'string' ? err.body.slice(0, 160) : '') ??
           err.message;
         onProgress?.(`${label} HTTP ${err.statusCode}: ${detail}`);

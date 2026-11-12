@@ -14,7 +14,9 @@
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
     "verify:paypal": "tsx src/paypal/verify-adapter.ts",
-    "test": "tsx src/engine/cli.ts --all --offline && tsx src/paypal/verify-adapter.ts"
+    "test": "tsx src/engine/cli.ts --all --offline && tsx src/paypal/verify-adapter.ts && tsx src/paypal/verify-ingest.ts && tsx src/paypal/verify-failclosed.ts",
+    "verify:ingest": "tsx src/paypal/verify-ingest.ts",
+    "verify:failclosed": "tsx src/paypal/verify-failclosed.ts"
   },
   "dependencies": {
     "@paypal/paypal-server-sdk": "^2.5.0",
