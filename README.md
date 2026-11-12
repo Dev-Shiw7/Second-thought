@@ -112,7 +112,7 @@ PayPal webhook ──► pending payment ───┤
                                       ▼
                     ┌─────────────────┴─────────────────┐
                     │                                   │
-          model path (Claude)                  offline scorer
+           model path (Groq)                 offline scorer
       narrative + intent classification    lexical + structural only
                     │                                   │
                     └─────────────────┬─────────────────┘
@@ -143,7 +143,8 @@ judgment is judgment.
 | | Model path | Offline scorer |
 |---|---|---|
 | Needs a key | yes | **no** |
-| Script + stage accuracy on fixtures | — *(see below)* | **6/6** |
+| Script identification on fixtures | **6/6** | **6/6** |
+| Stage accuracy on fixtures | 5/6 *(see below)* | **6/6** |
 | Reads intent | yes | no — lexical matching only |
 | Deterministic | no | yes |
 
@@ -196,10 +197,16 @@ otherwise would be worse than the gaps.
   Without them the endpoint runs **unverified** so the demo works on a clean
   checkout, and says so on every request (`signatureVerified: false`) and in
   `/api/health`. It has not been exercised against a real signed delivery.
-- **The model path has not been executed end to end.** It is written against the
-  documented SDK binding and typechecks cleanly, but the environment this was
-  built in had no API key, so every number quoted above for accuracy comes from
-  the offline scorer. Do not take the model path's behaviour on trust.
+- **The model path has now been run end to end, on six fixtures, once.** On
+  Groq (`openai/gpt-oss-120b`, reasoning effort high) it identifies all six
+  scripts correctly, including both controls — `clean` and `legit_large` come
+  back `none` at 0.94–0.96 confidence, which is the result that matters most.
+  It disagrees with one fixture's expected stage: `grandparent_early` is
+  labelled stage 4 (first payment) where the fixture says stage 3 (secrecy).
+  Six fixtures written by the same people who wrote the taxonomy is not an
+  accuracy measurement, and confidence values clustered at 0.96 are a model
+  being agreeable, not a model being calibrated. The offline scorer is still
+  what the regression tests assert against.
 - **A single webhook is not enough on its own.** A realistic event — $2,400, new
   payee, memo "urgent bail for Tommy, please do not tell mom" — scores 19 against
   a threshold of 20 and stays silent. Four signals fire from a memo; twelve fire

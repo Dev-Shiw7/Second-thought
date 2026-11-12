@@ -138,7 +138,7 @@ app.get('/api/assess/:name', async (req, res) => {
     res.status(404).json({ error: 'no such scenario' });
     return;
   }
-  const forceOffline = req.query.offline === '1' || !process.env.ANTHROPIC_API_KEY;
+  const forceOffline = req.query.offline === '1' || !process.env.GROQ_API_KEY;
   try {
     const acct = loadAccount(join(FIXTURES, name + '.json'));
     res.json(await buildView(acct, forceOffline));
@@ -200,7 +200,7 @@ app.post('/api/webhook', async (req, res) => {
     return;
   }
   const acct = applyWebhook(loadAccount(join(FIXTURES, base + '.json')), event);
-  const view = await buildView(acct, !process.env.ANTHROPIC_API_KEY);
+  const view = await buildView(acct, !process.env.GROQ_API_KEY);
   res.json({ ...view, signatureVerified });
 });
 
@@ -208,7 +208,7 @@ app.get('/api/health', (_req, res) => {
   const verifying = Boolean(readPayPalEnv() && process.env.PAYPAL_WEBHOOK_ID);
   res.json({
     ok: true,
-    engine: process.env.ANTHROPIC_API_KEY ? 'llm available' : 'offline only',
+    engine: process.env.GROQ_API_KEY ? 'llm available' : 'offline only',
     paypal: process.env.PAYPAL_CLIENT_ID ? 'credentials present' : 'no credentials',
     webhookSignatureVerification: verifying
       ? 'enabled'
@@ -221,6 +221,6 @@ const PORT = Number(process.env.PORT ?? 3000);
 app.listen(PORT, () => {
   console.log('Second Thought running at http://localhost:' + PORT);
   console.log(
-    '  engine: ' + (process.env.ANTHROPIC_API_KEY ? 'model path available' : 'offline scorer (no ANTHROPIC_API_KEY)'),
+    '  engine: ' + (process.env.GROQ_API_KEY ? 'model path available' : 'offline scorer (no GROQ_API_KEY)'),
   );
 });

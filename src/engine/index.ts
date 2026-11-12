@@ -31,7 +31,7 @@ export async function assess(acct: Account, opts: AssessOptions = {}): Promise<A
   const f = extract(acct);
   const signals = baseSignals(acct, f);
 
-  const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
+  const hasKey = Boolean(process.env.GROQ_API_KEY);
   if (opts.forceOffline || !hasKey) {
     return assessOffline(signals, f);
   }

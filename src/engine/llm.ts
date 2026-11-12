@@ -1,5 +1,5 @@
 /**
- * Model path.
+ * Model path. Runs on Groq.
  *
  * The model is NOT asked to be clever with raw data. It receives exact facts
  * already computed by `features.ts` - payee age, escalation curve, reciprocity,
@@ -8,11 +8,15 @@
  * ordinary privacy or secrecy coaching, whether a deadline is real or
  * manufactured, and which script the whole shape fits.
  *
- * The taxonomy is a stable prefix and is cached; only the per-account facts
- * vary between requests.
+ * The taxonomy is a stable prefix: it leads the system message so Groq's
+ * automatic prefix caching can reuse it; only the per-account facts vary.
+ *
+ * The answer shape is pinned by a JSON schema derived from the same zod schema
+ * that validates the reply, so a malformed answer fails here rather than
+ * downstream. Groq enforces the schema server-side in strict mode; the zod
+ * parse is the second line of defence.
  */
-import Anthropic from '@anthropic-ai/sdk';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import Groq from 'groq-sdk';
 import { z } from 'zod';
 import { SCRIPTS, SIGNAL_WEIGHT, SIGNAL_LABEL } from '../scripts/taxonomy.ts';
 import type { ScriptId, SignalKind } from '../scripts/taxonomy.ts';
@@ -20,7 +24,11 @@ import type { Account, Assessment, Signal } from '../types.ts';
 import type { Features } from './features.ts';
 import { chooseTier } from './offline.ts';
 
-const MODEL = process.env.SECOND_THOUGHT_MODEL ?? 'claude-opus-5-5';
+// `||`, not `??`: .env.example ships the override present but empty.
+const MODEL = process.env.SECOND_THOUGHT_MODEL || 'openai/gpt-oss-120b';
+
+/** Only the gpt-oss family on Groq accepts a reasoning effort knob. */
+const SUPPORTS_EFFORT = MODEL.startsWith('openai/gpt-oss');
 
 const SIGNAL_KINDS = Object.keys(SIGNAL_WEIGHT) as [SignalKind, ...SignalKind[]];
 const SCRIPT_IDS = ['none', ...SCRIPTS.map((s) => s.id)] as unknown as [string, ...string[]];
@@ -110,7 +118,10 @@ export async function assessWithModel(
   f: Features,
   priorSignals: Signal[],
 ): Promise<Assessment> {
-  const client = new Anthropic();
+  // High reasoning effort over a long taxonomy prompt runs past the SDK's
+  // 60s default often enough to matter; a timeout here costs the whole model
+  // path and silently drops back to the weaker offline scorer.
+  const client = new Groq({ timeout: 180_000, maxRetries: 2 });
 
   const facts = [
     `Account holder: ${acct.personName}, age band ${acct.personAgeBand}.`,
@@ -145,30 +156,45 @@ export async function assessWithModel(
       : '- nothing recorded',
   ].join('\n');
 
-  const response = await client.messages.parse({
+  const schema = z.toJSONSchema(AssessmentSchema) as Record<string, unknown>;
+  delete schema.$schema;
+
+  const response = await client.chat.completions.create({
     model: MODEL,
-    max_tokens: 16000,
-    output_config: {
-      effort: 'high',
-      format: zodOutputFormat(AssessmentSchema),
+    max_completion_tokens: 16000,
+    temperature: 0,
+    ...(SUPPORTS_EFFORT ? { reasoning_effort: 'high' as const } : {}),
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'assessment', strict: true, schema },
     },
-    system: [
-      {
-        type: 'text',
-        text: SYSTEM_INSTRUCTIONS + '\n\n' + taxonomyBrief(),
-        cache_control: { type: 'ephemeral' },
-      },
+    messages: [
+      { role: 'system', content: SYSTEM_INSTRUCTIONS + '\n\n' + taxonomyBrief() },
+      { role: 'user', content: facts },
     ],
-    messages: [{ role: 'user', content: facts }],
   });
 
-  if (response.stop_reason === 'refusal') {
-    throw new Error('model declined to assess this input');
+  const choice = response.choices[0];
+  if (!choice) {
+    throw new Error('model returned no choices');
   }
-  const parsed = response.parsed_output;
-  if (!parsed) {
-    throw new Error('structured output did not parse');
+  if (choice.finish_reason === 'length') {
+    throw new Error('model output was truncated before the assessment was complete');
   }
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(choice.message.content ?? '');
+  } catch {
+    throw new Error('structured output was not valid JSON');
+  }
+  // A refusal arrives as schema-shaped JSON that fails this parse, or as a
+  // thrown APIError above; either way the caller falls back to the offline scorer.
+  const result = AssessmentSchema.safeParse(raw);
+  if (!result.success) {
+    throw new Error('structured output did not match the schema: ' + result.error.message);
+  }
+  const parsed = result.data;
 
   const script = SCRIPTS.find((s) => s.id === parsed.script);
   const stageDef = script?.stages.find((st) => st.n === parsed.stage);
